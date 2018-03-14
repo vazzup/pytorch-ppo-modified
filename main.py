@@ -21,13 +21,20 @@ from models import Policy, Value, ActorCritic
 from replay_memory import Memory
 from running_state import ZFilter
 
-def select_action(state):
+def select_action(state, policy_net):
     torch.set_default_tensor_type('torch.DoubleTensor')
     PI = torch.DoubleTensor([3.1415926])
     state = torch.from_numpy(state).unsqueeze(0)
     action_mean, _, action_std = policy_net(Variable(state))
     action = torch.normal(action_mean, action_std)
     return action
+
+def normal_log_density(x, mean, log_std, std):
+    torch.set_default_tensor_type('torch.DoubleTensor')
+    PI = torch.DoubleTensor([3.1415926])
+    var = std.pow(2)
+    log_density = -(x - mean).pow(2) / (2 * var) - 0.5 * torch.log(2 * Variable(PI)) - log_std
+    return log_density.sum(1)
 
 def select_action_actor_critic(state):
     torch.set_default_tensor_type('torch.DoubleTensor')
@@ -37,7 +44,7 @@ def select_action_actor_critic(state):
     action = torch.normal(action_mean, action_std)
     return action
 
-def update_params(batch, policy_net, value_net, gamma):
+def update_params(batch, policy_net, value_net, gamma, opt_policy, opt_value):
     torch.set_default_tensor_type('torch.DoubleTensor')
     PI = torch.DoubleTensor([3.1415926])
     rewards = torch.Tensor(batch.reward)
@@ -134,7 +141,7 @@ def main(gamma=0.995, env_name='Walker2d-v2', tau=0.97, seed=543, number_of_batc
 
             reward_sum = 0
             for t in range(maximum_steps): # Don't infinite loop while learning
-                action = select_action(state)
+                action = select_action(state, policy_net)
                 action = action.data[0].numpy()
                 next_state, reward, done, _ = env.step(action)
                 reward_sum += reward
@@ -159,7 +166,7 @@ def main(gamma=0.995, env_name='Walker2d-v2', tau=0.97, seed=543, number_of_batc
 
         reward_batch /= num_episodes
         batch = memory.sample()
-        update_params(batch)
+        update_params(batch, policy_net, value_net, gamma, opt_policy, opt_value)
 
         if i_episode % args.log_interval == 0:
             print('Episode {}\tLast reward: {}\tAverage reward {:.2f}'.format(
