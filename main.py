@@ -21,6 +21,17 @@ from models import Policy, Value, ActorCritic
 from replay_memory import Memory
 from running_state import ZFilter
 
+import plotly
+import plotly.graph_objs as go
+from plotly.graph_objs import Layout,Scatter
+
+PI = torch.DoubleTensor([3.1415926])
+
+def normal_log_density(x, mean, log_std, std):
+    var = std.pow(2)
+    log_density = -(x - mean).pow(2) / (2 * var) - 0.5 * torch.log(2 * Variable(PI)) - log_std
+    return log_density.sum(1)
+
 def select_action(state, policy_net):
     torch.set_default_tensor_type('torch.DoubleTensor')
     PI = torch.DoubleTensor([3.1415926])
@@ -128,7 +139,7 @@ def main(gamma=0.995, env_name='Walker2d-v2', tau=0.97, seed=543, number_of_batc
     running_state = ZFilter((num_inputs,), clip=5)
     running_reward = ZFilter((1,), demean=False, clip=10)
     episode_lengths = []
-
+    plot_rew = []
     for i_episode in range(number_of_batches):
         memory = Memory()
 
@@ -166,11 +177,21 @@ def main(gamma=0.995, env_name='Walker2d-v2', tau=0.97, seed=543, number_of_batc
 
         reward_batch /= num_episodes
         batch = memory.sample()
+        plot_rew.append(reward_batch)
         update_params(batch, policy_net, value_net, gamma, opt_policy, opt_value)
 
         if i_episode % args.log_interval == 0:
             print('Episode {}\tLast reward: {}\tAverage reward {:.2f}'.format(
                 i_episode, reward_sum, reward_batch))
+    
+    plot_epi = []
+    for i in range (number_of_batches):
+        plot_epi.append(i)
+    trace = go.Scatter( x = plot_epi, y = plot_rew) 
+    layout = go.Layout(title='PPO',xaxis=dict(title='Episodes', titlefont=dict(family='Courier New, monospace',size=18,color='#7f7f7f')),
+    yaxis=dict(title='Average Reward', titlefont=dict(family='Courier New, monospace',size=18,color='#7f7f7f')))
+
+    plotly.offline.plot({"data": [trace], "layout": layout},filename='PPO.html',image='jpeg')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='PyTorch actor-critic example')
@@ -188,11 +209,11 @@ if __name__ == '__main__':
     #                     help='damping (default: 1e-1)')
     parser.add_argument('--seed', type=int, default=543, metavar='N',
                         help='random seed (default: 1)')
-    parser.add_argument('--number-of-batches', type=int, default=500, metavar='N',
+    parser.add_argument('--number-of-batches', type=int, default=50, metavar='N',
                         help='number of batches (default: 500)')
-    parser.add_argument('--batch-size', type=int, default=5000, metavar='N',
+    parser.add_argument('--batch-size', type=int, default=20, metavar='N',
                         help='batch size (default: 5000)')
-    parser.add_argument('--maximum_steps', type=int, default=10000, metavar='N',
+    parser.add_argument('--maximum_steps', type=int, default=10, metavar='N',
                         help='maximum number of steps (default: 10000)')
     parser.add_argument('--render', action='store_true',
                         help='render the environment')
